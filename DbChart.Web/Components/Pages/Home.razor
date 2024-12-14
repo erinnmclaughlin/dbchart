@@ -1,0 +1,202 @@
+﻿@page "/"
+@using System.ComponentModel
+@using System.Reflection
+@using DbChart.Web.Database
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.EntityFrameworkCore.Infrastructure
+@using Microsoft.EntityFrameworkCore.Metadata
+@using Microsoft.EntityFrameworkCore.Migrations
+@using Microsoft.EntityFrameworkCore.Storage
+@inject IDbContextFactory<AppDbContext> DbContextFactory
+
+<PageTitle>DbChart &middot; @DatabaseName</PageTitle>
+
+<div class="container">
+    @if (IsLoading)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        <h1>DbChart</h1>
+        
+        <h2><code>@DatabaseName</code></h2>
+
+        <h3>Table Summaries</h3>
+        <table class="table table-hover table-bordered">
+            <thead>
+            <tr>
+                <th>Display Name</th>
+                <th>Table Name</th>
+                <th class="text-end"># Columns</th>
+                <th class="text-end"># Referencing</th>
+                <th class="text-end"># Referenced By</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var table in DatabaseModel?.GetEntityTypes().SelectMany(t => t.GetTableMappings().Select(x => x.Table)) ?? [])
+            {
+                <tr @onclick="() => Select(table)"
+                    class="@(SelectedTable == table ? "table-active" : "")"
+                    style="cursor: pointer">
+                    <td>@GetDisplayName(table)</td>
+                    <td><code>@table.SchemaQualifiedName</code></td>
+                    <td class="text-end">@table.Columns.Count()</td>
+                    <td class="text-end">@table.ForeignKeyConstraints.Count()</td>
+                    <td class="text-end">@table.ReferencingForeignKeyConstraints.Count()</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        @if (SelectedTable is not null)
+        {
+            var entityType = SelectedTable.EntityTypeMappings.First().TypeBase.ContainingEntityType;
+            var displayName = GetDisplayName(entityType);
+
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <h5 class="card-title">@displayName</h5>
+                    @if (entityType.GetComment() is { } tableComment)
+                    {
+                        <p class="card-subtitle">
+                            <em class="text-muted">@tableComment</em>
+                        </p>
+                    }
+                    <div class="card-text">
+                        <ul class="mb-0">
+                            @foreach (IReadOnlyNavigation n in entityType.GetNavigations())
+                            {
+                                var navigation = n;
+                                var relationshipDescription = GetRelationshipDescription(navigation);
+
+                                if (relationshipDescription is null && navigation.Inverse is not null)
+                                {
+                                    navigation = navigation.Inverse;
+                                    relationshipDescription = GetRelationshipDescription(navigation);
+                                }
+
+                                var source = GetDisplayName(navigation.DeclaringEntityType);
+                                var target = GetDisplayName(navigation.TargetEntityType);
+
+                                <li>
+                                    A@(StartsWithVowel(source) ? "n" : "") <strong>@source.ToLower()</strong>
+                                    @(relationshipDescription ?? "has")
+                                    @(navigation.IsCollection ? "many" : "a single") <strong>@target.ToLower()@(navigation.IsCollection ? "s" : "")</strong>.
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+                <table class="table table-sm mb-0 border-top">
+                    <thead>
+                    <tr>
+                        <th></th>
+                        <th>Column Name</th>
+                        <th>Column Type</th>
+                        <th>Comment</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var col in SelectedTable.Columns)
+                    {
+                        <tr class="align-items-center">
+                            <td class="text-center small">
+                                @if (SelectedTable.PrimaryKey?.Columns.Contains(col) ?? false)
+                                {
+                                    <text>PK</text>
+                                }
+                                @if (SelectedTable.ForeignKeyConstraints.Any(fk => fk.Columns.Contains(col)))
+                                {
+                                    <text>FK</text>
+                                }
+                            </td>
+                            <td><code>@col.Name</code></td>
+                            <td><code>@col.StoreType</code></td>
+                            <td><em class="small text-muted">@col.Comment</em></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+
+                @if (CreateTableCommands.TryGetValue(SelectedTable.Name, out var sql))
+                {
+                    <div class="position-relative d-flex flex-column" style="height: 300px">
+                        <CodeBlock Code="@sql" Language="sql"/>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p>Select a table to view details.</p>
+        }
+    }
+</div>
+
+@code {
+
+    private bool IsLoading { get; set; } = true;
+    private string DatabaseName { get; set; } = "";
+    private IModel? DatabaseModel { get; set; }
+
+    private ITable? SelectedTable { get; set; }
+    private Dictionary<string, string> CreateTableCommands { get; set; } = [];
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await using var dbContext = await DbContextFactory.CreateDbContextAsync();
+        DatabaseName = dbContext.Database.GetDbConnection().Database;
+        DatabaseModel = dbContext.GetService<IDesignTimeModel>().Model;
+        
+        var dbCreator = dbContext.GetService<IDatabaseCreator>();
+        var scripts = typeof(RelationalDatabaseCreator)
+            .GetMethod("GetCreateTablesCommands", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.Invoke(
+                dbCreator as RelationalDatabaseCreator,
+                [MigrationsSqlGenerationOptions.Default
+            ]) as IReadOnlyList<MigrationCommand>;
+
+        foreach (var script in scripts?.Select(x => x.CommandText).Where(x => x.StartsWith("CREATE TABLE")) ?? [])
+        {
+            var tableName = script.AsSpan()[(script.IndexOf('[') + 1)..(script.IndexOf(']'))].ToString();
+            CreateTableCommands.Add(tableName, script);
+        }
+        
+        IsLoading = false;
+    }
+
+    private void Select(ITable table)
+    {
+        SelectedTable = SelectedTable == table ? null : table;
+    }
+    
+    private static bool StartsWithVowel(string text) => text.AsSpan()[0] switch
+    {
+        'A' or 'E' or 'I' or 'O' or 'U' => true,
+        'a' or 'e' or 'i' or 'o' or 'u' => true,
+        _ => false
+    };
+
+    private static string GetDisplayName(ITable table)
+    {
+        var entityType = table.EntityTypeMappings.First().TypeBase.ContainingEntityType;
+        return GetDisplayName(entityType);
+    }
+    
+    private static string GetDisplayName(IReadOnlyEntityType entityType) => entityType
+        .ClrType
+        .GetCustomAttributes()
+        .OfType<DisplayNameAttribute>()
+        .FirstOrDefault()?
+        .DisplayName 
+        ?? entityType.DisplayName();
+
+    private static string? GetRelationshipDescription(IReadOnlyNavigation navigation) => navigation
+        .PropertyInfo?
+        .GetCustomAttributes(typeof(RelationshipDescriptionAttribute), false)
+        .Cast<RelationshipDescriptionAttribute>()
+        .FirstOrDefault()?
+        .Description;
+
+}

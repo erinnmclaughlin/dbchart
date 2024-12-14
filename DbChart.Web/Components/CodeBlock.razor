@@ -1,0 +1,55 @@
+﻿@inject IJSRuntime JavaScriptRuntime
+
+<div class="hljs" style="position: relative">
+    <pre>
+        <code @ref="e" class="@Language"></code>
+    </pre>
+    @if(!string.IsNullOrWhiteSpace(Code))
+    {
+        <button class="hljs" type="button" title="Copy to Clipboard" @onclick="CopyToClipboard">
+            <svg xmlns="http://www.w3.org/2000/svg" height="20" width="17.5" viewBox="0 0 448 512"><!--!Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2023 Fonticons, Inc.--><path d="M384 336H192c-8.8 0-16-7.2-16-16V64c0-8.8 7.2-16 16-16l140.1 0L400 115.9V320c0 8.8-7.2 16-16 16zM192 384H384c35.3 0 64-28.7 64-64V115.9c0-12.7-5.1-24.9-14.1-33.9L366.1 14.1c-9-9-21.2-14.1-33.9-14.1H192c-35.3 0-64 28.7-64 64V320c0 35.3 28.7 64 64 64zM64 128c-35.3 0-64 28.7-64 64V448c0 35.3 28.7 64 64 64H256c35.3 0 64-28.7 64-64V416H272v32c0 8.8-7.2 16-16 16H64c-8.8 0-16-7.2-16-16V192c0-8.8 7.2-16 16-16H96V128H64z" /></svg>
+        </button>
+    }
+</div>
+
+@code {
+    private ElementReference e;
+    private bool IsRendered { get; set; }
+    private string FormattedCode { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public required string Code { get; set; }
+
+    [Parameter]
+    public string? Language { get; set; }
+
+    [Parameter]
+    public bool Indent { get; set; } = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsRendered)
+            await InvokeHighlighter();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InvokeHighlighter();
+            IsRendered = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await JavaScriptRuntime.InvokeVoidAsync("copyInnerText", e);
+    }
+
+    private async Task InvokeHighlighter()
+    {
+        await JavaScriptRuntime.InvokeVoidAsync("setInnerHtml", e, Code);
+        await JavaScriptRuntime.InvokeVoidAsync("highlightElement", e);
+    }
+}
