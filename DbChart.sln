@@ -2,6 +2,12 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DbChart.Web", "DbChart.Web\DbChart.Web.csproj", "{2AE03D5F-725D-4111-91AB-F56A05C9A3A9}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{EFD507CE-0B57-4328-9DCB-4C1FF67E24F0}"
+	ProjectSection(SolutionItems) = preProject
+		screenshot.png = screenshot.png
+		readme.md = readme.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
