@@ -12,7 +12,7 @@
 <PageTitle>DbChart &middot; @DatabaseName</PageTitle>
 
 <div class="container">
-    @if (IsLoading)
+    @if (DatabaseModel is null)
     {
         <p>Loading...</p>
     }
@@ -49,6 +49,16 @@
             </tbody>
         </table>
 
+        @*
+        @if (DatabaseModel is not null)
+        {
+            <h2>ER Diagram</h2>
+        
+            <MermaidDiagram>
+                @MermaidDiagramGenerator.Generate(DatabaseModel)
+            </MermaidDiagram>
+        }*@
+        
         @if (SelectedTable is not null)
         {
             var entityType = SelectedTable.EntityTypeMappings.First().TypeBase.ContainingEntityType;
@@ -125,6 +135,8 @@
                         <CodeBlock Code="@sql" Language="sql"/>
                     </div>
                 }
+                
+                <MermaidDiagram Value="@MermaidDiagramGenerator.Generate(DatabaseModel, SelectedTable)" />
             </div>
         }
         else
@@ -133,7 +145,6 @@
         }
     }
 </div>
-
 @code {
 
     private bool IsLoading { get; set; } = true;
@@ -162,8 +173,15 @@
             var tableName = script.AsSpan()[(script.IndexOf('[') + 1)..(script.IndexOf(']'))].ToString();
             CreateTableCommands.Add(tableName, script);
         }
-        
-        IsLoading = false;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
     }
 
     private void Select(ITable table)
@@ -198,5 +216,6 @@
         .Cast<RelationshipDescriptionAttribute>()
         .FirstOrDefault()?
         .Description;
+    
 
 }

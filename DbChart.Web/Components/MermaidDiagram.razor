@@ -1,0 +1,19 @@
+﻿@inject IJSRuntime JavaScript
+
+<pre class="dbchart">@Value</pre>
+
+@code {
+    private bool IsRendered { get; set; }
+    
+    [Parameter]
+    public string? Value { get; set; }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await using var module = await JavaScript.LoadModuleAsync();
+        await module.InvokeVoidAsync("init");
+        IsRendered = true;
+        StateHasChanged();
+    }
+
+}
